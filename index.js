@@ -85,7 +85,7 @@ fs.readFile(csvPath, function(err, fileData) {
    
     let addressesPhones = computeAddressesPhone(groupedOutput, eids, phoneRowsIndex)
 
-    let addressesEmails = computeAddressesEmail(groupedOutput, eids, emailRowsIndex)
+    let addressesEmails = computeAddressesEmail(groupedOutput, eids, emailRowsIndex) // still have to implement checks
   });
 });
 
@@ -104,21 +104,21 @@ groupById = function(rows) {
  **************************************************/
 computeAddressesPhone = function(groupedRows, eids, phoneRowsIndex) {
   return eids.map(key => {
-    return _.reduce(groupedRows[key], (acc, rows) => {
-      phoneRowsIndex.forEach((phoneIdx) => {
-        if (acc[phoneIdx[0]]) {
-          acc[phoneIdx[0]] += rows[phoneIdx[0]] ? rows[phoneIdx[0]] : ''
-        } else {
-          acc[phoneIdx[0]] = rows[phoneIdx[0]] ? rows[phoneIdx[0]] : ''
-        }
-
-        acc[phoneIdx[0]] += ' '
-      })
-      return acc
-    }, {})
+    return phoneRowsIndex.map((phoneRow) => {
+      obj = {}
+      groupedRows[key].forEach(row => {
+        tags = phoneRow[0].split(/,| /).slice(1).filter(val => val)
+        obj['eid'] = key
+        obj['type'] = 'phone'
+        obj['tags'] = tags
+        obj['address'] = row[phoneRow[0]];
+      });
+      if (obj.address) {
+        return obj
+      } else null
+    }).filter(val => val)
   })
 }
-
 
 /* ***********************************************
  *@param rows - csv parsed data rows
@@ -126,17 +126,18 @@ computeAddressesPhone = function(groupedRows, eids, phoneRowsIndex) {
 
 computeAddressesEmail = function(groupedRows, eids, emailRowsIndex) {
   return eids.map(key => {
-    return _.reduce(groupedRows[key], (acc, rows) => {
-      emailRowsIndex.forEach((emailIdx) => {
-        if (acc[emailIdx[0]]) {
-          acc[emailIdx[0]] += rows[emailIdx[0]] ? rows[emailIdx[0]] : ''
-        } else {
-          acc[emailIdx[0]] = rows[emailIdx[0]] ? rows[emailIdx[0]] : ''
-        }
-
-        acc[emailIdx[0]] += ' '
-      })
-      return acc
-    }, {})
+    return emailRowsIndex.map((emailRow) => {
+      obj = {}
+      groupedRows[key].forEach(row => {
+        tags = emailRow[0].split(/,| /).slice(1).filter(val => val)
+        obj['eid'] = key
+        obj['type'] = 'email'
+        obj['tags'] = tags
+        obj['address'] = row[emailRow[0]];
+      });
+       if (obj.address) {
+        return obj
+      } else null
+    }).filter(val => val)
   })
 }
