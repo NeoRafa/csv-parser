@@ -7,27 +7,27 @@ var _ = require("lodash");
 
 var csvPath = "input.csv";
 
-fs.readFile(csvPath, function(err, fileData) {
-  parse(fileData, { columns: false, trim: true }, function(err, rows) {
+fs.readFile(csvPath, function (err, fileData) {
+  parse(fileData, { columns: false, trim: true }, function (err, rows) {
     let eids = [];
-    let emailRowsIndex = getRowIndex(rows[0], "email");
-    let phoneRowsIndex = getRowIndex(rows[0], "phone");
-    let eidIdx = getRowIndex(rows[0], "eid");
-    let fullnameIdx = getRowIndex(rows[0], "fullname");
-    let invisibleIdx = getRowIndex(rows[0], "invisible");
-    let seeAllIdx = getRowIndex(rows[0], "see_all");
-    let classesIndex = getRowIndex(rows[0], "class");
+
+    const emailRowsIndex = getRowIndex(rows[0], "email");
+    const phoneRowsIndex = getRowIndex(rows[0], "phone");
+    const eidIdx = getRowIndex(rows[0], "eid");
+    const fullnameIdx = getRowIndex(rows[0], "fullname");
+    const invisibleIdx = getRowIndex(rows[0], "invisible");
+    const seeAllIdx = getRowIndex(rows[0], "see_all");
+    const classesIndex = getRowIndex(rows[0], "class");
 
     let outputIntermediate = rows
-      .map(row => {
+      .map((row) => {
         let obj = {};
+
         if (row[fullnameIdx[0][1]] === "fullname") {
           return null;
         }
-
         getRowObjectFromFields(
           eids,
-          rows,
           eidIdx,
           row,
           obj,
@@ -41,88 +41,129 @@ fs.readFile(csvPath, function(err, fileData) {
 
         return obj;
       })
-      .filter(val => val);
+      .filter((val) => val);
+
     eids = _.uniq(eids);
 
-    let groupedOutput = groupById(outputIntermediate);
+    let groupedOutput = groupRowsById(outputIntermediate);
 
-    let addressesPhones = computeAddressesPhone(
+    let addressesPhones = parseGroupedPhones(
       groupedOutput,
       eids,
       phoneRowsIndex
     );
 
-    let addressesEmails = computeAddressesEmail(
+    let addressesEmails = parseGroupedEmails(
       groupedOutput,
       eids,
       emailRowsIndex
     ); // still have to implement checks
 
-    let classes = computeClasses(groupedOutput, eids, classesIndex);
-
-    console.log(classes);
-
+    let classes = parseGroupedClasses(groupedOutput, eids, classesIndex);
     let finalOutput = [];
 
-    eids.forEach(key => {
-      let obj = {
-        fullname: outputIntermediate.find(elem => elem.eid === key).fullname,
-        eid: key,
-        classes: findClassByEid(classes, key),
-        tags: [
-          ...findPhoneByEid(addressesPhones, key),
-          ...findEmailByEid(addressesEmails, key)
-        ],
-        invisible: getRowInvisibility(groupedOutput, key),
-        see_all: getRowSeeAll(groupedOutput, key)
-      };
-      finalOutput.push(obj);
+    buildFinalJsonOutput(
+      eids,
+      outputIntermediate,
+      classes,
+      addressesPhones,
+      addressesEmails,
+      groupedOutput,
+      finalOutput
+    );
+
+    const data = JSON.stringify(finalOutput);
+
+    fs.writeFile("output.json", data, (err) => {
+      if (err) throw err;
     });
-    console.log(finalOutput);
   });
 });
 
-getRowIndex = function(row, field) {
+/**************************************************
+ *@param row - header row
+ *@param field - field being searched
+ **************************************************/
+
+function getRowIndex(row, field) {
   return row
     .map((row, index) => {
       return row.includes(field) ? [row, index] : null;
     })
-    .filter(val => val);
-};
-
-function getRowInvisibility(rows, key) {
-  return rows[key].filter(elem => elem.invisible === "1").length > 0;
+    .filter((val) => val);
 }
 
+function buildFinalJsonOutput(
+  eids,
+  outputIntermediate,
+  classes,
+  addressesPhones,
+  addressesEmails,
+  groupedOutput,
+  finalOutput
+) {
+  eids.forEach((key) => {
+    let jsonObjectBuilder = {
+      fullname: outputIntermediate.find((elem) => elem.eid === key).fullname,
+      eid: key,
+      classes: findClassByEid(classes, key),
+      tags: [
+        ...findPhoneByEid(addressesPhones, key),
+        ...findEmailByEid(addressesEmails, key),
+      ],
+      invisible: getRowInvisibility(groupedOutput, key),
+      see_all: getRowSeeAll(groupedOutput, key),
+    };
+    finalOutput.push(jsonObjectBuilder);
+  });
+}
+
+/* ***********************************************
+ *@param rows - csv parsed data rows
+ *@param key - current analysing row ID
+ **************************************************/
+
+function getRowInvisibility(rows, key) {
+  return rows[key].filter((elem) => elem.invisible === "1").length > 0;
+}
+
+/* ***********************************************
+ *@param rows - csv parsed data rows
+ *@param key - current analysing row ID
+ **************************************************/
+
 function getRowSeeAll(rows, key) {
-  return rows[key].filter(elem => elem.see_all === "yes").length > 0;
+  return rows[key].filter((elem) => elem.see_all === "yes").length > 0;
 }
 
 /* ***********************************************
  *@param rows - csv parsed data rows
  **************************************************/
-groupById = function(rows) {
-  let groupedClasses = _.groupBy(rows, row => {
+function groupRowsById(rows) {
+  let groupedClasses = _.groupBy(rows, (row) => {
     return row["eid"];
   });
   return groupedClasses;
-};
+}
 
 /* ***********************************************
- *@param rows - csv parsed data rows
+ *@param groupedRows -rows grouped by ID
+ *@param eids - Array containing IDs of each row entry
+ *@param phoneRowsIndex - Indexes of each phone related row
  **************************************************/
-computeAddressesPhone = function(groupedRows, eids, phoneRowsIndex) {
-  return eids.map(key => {
+
+function parseGroupedPhones(groupedRows, eids, phoneRowsIndex) {
+  return eids.map((key) => {
     return {
       eid: key,
       phones: phoneRowsIndex
-        .map(phoneRow => {
+        .map((phoneRow) => {
           obj = {};
-          groupedRows[key].forEach(row => {
+          groupedRows[key].forEach((row) => {
             tags = phoneRow[0]
               .split(/,| /)
               .slice(1)
-              .filter(val => val);
+              .filter((val) => val);
             obj["type"] = "phone";
             obj["tags"] = tags;
             obj["address"] = row[phoneRow[0]];
@@ -131,27 +172,29 @@ computeAddressesPhone = function(groupedRows, eids, phoneRowsIndex) {
             return obj;
           } else null;
         })
-        .filter(val => val)
+        .filter((val) => val),
     };
   });
-};
+}
 
 /* ***********************************************
- *@param rows - csv parsed data rows
+ *@param groupedRows -rows grouped by ID
+ *@param eids - Array containing IDs of each row entry
+ *@param emailRowsIndex - indexes of each email related row
  **************************************************/
 
-computeAddressesEmail = function(groupedRows, eids, emailRowsIndex) {
-  return eids.map(key => {
+function parseGroupedEmails(groupedRows, eids, emailRowsIndex) {
+  return eids.map((key) => {
     return {
       eid: key,
       emails: emailRowsIndex
-        .map(emailRow => {
+        .map((emailRow) => {
           obj = {};
-          groupedRows[key].forEach(row => {
+          groupedRows[key].forEach((row) => {
             tags = emailRow[0]
               .split(/,| /)
               .slice(1)
-              .filter(val => val);
+              .filter((val) => val);
             obj["type"] = "email";
             obj["tags"] = tags;
             obj["address"] = row[emailRow[0]];
@@ -160,17 +203,18 @@ computeAddressesEmail = function(groupedRows, eids, emailRowsIndex) {
             return obj;
           } else null;
         })
-        .filter(val => val)
+        .filter((val) => val),
     };
   });
-};
+}
 
 /* ***********************************************
- *@param rows - csv parsed data rows
+ *@param groupedRows -rows grouped by ID
+ *@param eids - Array containing IDs of each row entry
  **************************************************/
 
-function computeClasses(groupedRows, eids) {
-  return eids.map(key => {
+function parseGroupedClasses(groupedRows, eids) {
+  return eids.map((key) => {
     return {
       eid: key,
       ..._.reduce(
@@ -180,75 +224,91 @@ function computeClasses(groupedRows, eids) {
           return acc;
         },
         {
-          classes: []
+          classes: [],
         }
-      )
+      ),
     };
   });
 }
 
 /* ***********************************************
- *@param rows - csv parsed data rows
+ *@param eids - IDS for each row entry in CSV
+ *@param currentRow - Current row for which object is being created
+ *@param builderObject - result object to return from row
+ *@params *Index - Index at splitted CSV of *
  **************************************************/
 
 function getRowObjectFromFields(
   eids,
-  rows,
-  eidIdx,
-  row,
-  obj,
-  fullnameIdx,
-  seeAllIdx,
-  invisibleIdx,
+  idIndex,
+  currentRow,
+  builderObject,
+  fullnameIndex,
+  seeAllIndex,
+  invisibleIndex,
   phoneRowsIndex,
   emailRowsIndex,
   classesIndex
 ) {
-  eids.push(row[eidIdx[0][1]]);
-  obj[fullnameIdx[0][0]] = row[fullnameIdx[0][1]];
-  obj[eidIdx[0][0]] = row[eidIdx[0][1]];
-  obj[seeAllIdx[0][0]] = row[seeAllIdx[0][1]];
-  obj[invisibleIdx[0][0]] = row[invisibleIdx[0][1]];
-  phoneRowsIndex.forEach(phoneRow => {
-    obj[phoneRow[0]] = row[phoneRow[1]];
+  eids.push(currentRow[idIndex[0][1]]);
+  builderObject[fullnameIndex[0][0]] = currentRow[fullnameIndex[0][1]];
+  builderObject[idIndex[0][0]] = currentRow[idIndex[0][1]];
+  builderObject[seeAllIndex[0][0]] = currentRow[seeAllIndex[0][1]];
+  builderObject[invisibleIndex[0][0]] = currentRow[invisibleIndex[0][1]];
+  phoneRowsIndex.forEach((phoneRow) => {
+    builderObject[phoneRow[0]] = currentRow[phoneRow[1]];
   });
-  emailRowsIndex.forEach(emailRow => {
-    obj[emailRow[0]] = row[emailRow[1]];
+  emailRowsIndex.forEach((emailRow) => {
+    builderObject[emailRow[0]] = currentRow[emailRow[1]];
   });
-  obj["classes"] = [];
+  builderObject["classes"] = [];
 
-  classesIndex.forEach(classesRow => {
-    obj["classes"].push(
-      ...row[classesRow[1]]
+  classesIndex.forEach((classesRow) => {
+    builderObject["classes"].push(
+      ...currentRow[classesRow[1]]
         .split(/,|\//)
-        .map(elem => elem.trim())
-        .filter(val => val)
+        .map((elem) => elem.trim())
+        .filter((val) => val)
     );
   });
 }
 
+/* ***********************************************
+ *@param eid - ID for each row entry
+ *@param classes - classes ready object for output
+ **************************************************/
+
 function findClassByEid(classes, eid) {
-  let classOut = classes.filter(classItem => classItem["eid"] === eid);
+  let classOut = classes.filter((classItem) => classItem["eid"] === eid);
   if (classOut !== []) {
-    return classes.filter(classItem => classItem["eid"] === eid)[0].classes;
+    return classes.filter((classItem) => classItem["eid"] === eid)[0].classes;
   } else {
     return null;
   }
 }
+
+/* ***********************************************
+ *@param eid - ID for each row entry
+ *@param phones - phones ready object for output
+ **************************************************/
 
 function findPhoneByEid(phones, eid) {
-  let phonOut = phones.filter(phonItem => phonItem["eid"] === eid);
+  let phonOut = phones.filter((phonItem) => phonItem["eid"] === eid);
   if (phonOut !== []) {
-    return phones.filter(phonItem => phonItem["eid"] === eid)[0].phones;
+    return phones.filter((phonItem) => phonItem["eid"] === eid)[0].phones;
   } else {
     return null;
   }
 }
 
+/* ***********************************************
+ *@param eid - ID for each row entry
+ *@param emails - emails ready object for output
+ **************************************************/
 function findEmailByEid(emails, eid) {
-  let emailsOut = emails.filter(emailsItem => emailsItem["eid"] === eid);
+  let emailsOut = emails.filter((emailsItem) => emailsItem["eid"] === eid);
   if (emailsOut !== []) {
-    return emails.filter(emailsItem => emailsItem["eid"] === eid)[0].emails;
+    return emails.filter((emailsItem) => emailsItem["eid"] === eid)[0].emails;
   } else {
     return null;
   }
