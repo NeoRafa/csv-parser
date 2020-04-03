@@ -42,6 +42,7 @@ fs.readFile(csvPath, function(err, fileData) {
         return obj
       })
       .filter(val => val)
+    eids = _.uniq(eids)
 
     let groupedOutput = groupById(outputIntermediate)
 
@@ -57,7 +58,9 @@ fs.readFile(csvPath, function(err, fileData) {
       emailRowsIndex
     ) // still have to implement checks
 
-    let classes = computeClasses(groupedRows, eids, classesIndex)
+    let classes = computeClasses(groupedOutput, eids, classesIndex)
+
+    console.log(classes)
   })
 })
 
@@ -136,24 +139,22 @@ computeAddressesEmail = function(groupedRows, eids, emailRowsIndex) {
  *@param rows - csv parsed data rows
  **************************************************/
 
-function computeClasses(groupedRows, eids, classesIndex) {
+function computeClasses(groupedRows, eids) {
   return eids.map(key => {
-    return classesIndex.map(index => {
-      return {
-        eid: key,
-        ..._.reduce(
-          groupedRows[key],
-          (acc, curr) => {
-            if (acc[index[0]]) {
-              acc[index[0]] += curr[index[0]]
-            } else {
-              acc[index[0]] = curr[index[0]]
-            }
-          },
-          {}
-        )
-      }
-    })
+    return {
+      eid: key,
+      ..._.reduce(
+        groupedRows[key],
+        (acc, curr) => {
+          acc['classes'] += ' ' + curr['classes']
+          acc['classes'] = acc['classes'].trim()
+          return acc
+        },
+        {
+          classes: ''
+        }
+      )
+    }
   })
 }
 
@@ -174,7 +175,7 @@ function getRowObjectFromFields(
   emailRowsIndex,
   classesIndex
 ) {
-  eids.includes(rows[eidIdx[0][1]]) ? null : eids.push(row[eidIdx[0][1]])
+  eids.push(row[eidIdx[0][1]])
   obj[fullnameIdx[0][0]] = row[fullnameIdx[0][1]]
   obj[eidIdx[0][0]] = row[eidIdx[0][1]]
   obj[seeAllIdx[0][0]] = row[seeAllIdx[0][1]]
@@ -185,7 +186,11 @@ function getRowObjectFromFields(
   emailRowsIndex.forEach(emailRow => {
     obj[emailRow[0]] = row[emailRow[1]]
   })
+  obj['classes'] = ''
+
   classesIndex.forEach(classesRow => {
-    obj[classesRow[0]] = row[classesRow[1]]
+    obj['classes'] += row[classesRow[1]] + ' '
   })
+
+  obj['classes'] = obj['classes'].split(/,|\//).map(elem => elem.trim()).join(' ')
 }
