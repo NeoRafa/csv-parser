@@ -8,38 +8,39 @@ var _ = require("lodash");
 var csvPath = "input.csv";
 
 fs.readFile(csvPath, function (err, fileData) {
+  if (err) throw err;
   parse(fileData, { columns: false, trim: true }, function (err, rows) {
     let eids = [];
 
-    const emailRowsIndex = getRowIndex(rows[0], "email");
-    const phoneRowsIndex = getRowIndex(rows[0], "phone");
-    const eidIdx = getRowIndex(rows[0], "eid");
-    const fullnameIdx = getRowIndex(rows[0], "fullname");
-    const invisibleIdx = getRowIndex(rows[0], "invisible");
-    const seeAllIdx = getRowIndex(rows[0], "see_all");
-    const classesIndex = getRowIndex(rows[0], "class");
+    const emailHeadersIndex = getRowIndex(rows[0], "email");
+    const phoneHeadersIndex = getRowIndex(rows[0], "phone");
+    const idsHeaderIndex = getRowIndex(rows[0], "eid");
+    const fullnameHeaderIndex = getRowIndex(rows[0], "fullname");
+    const invisibleHeaderIndex = getRowIndex(rows[0], "invisible");
+    const seeAllHeaderIndex = getRowIndex(rows[0], "see_all");
+    const classesHeadersIndex = getRowIndex(rows[0], "class");
 
     let outputIntermediate = rows
       .map((row) => {
-        let obj = {};
+        let builderObject = {};
 
-        if (row[fullnameIdx[0][1]] === "fullname") {
+        if (row[fullnameHeaderIndex[0][1]] === "fullname") {
           return null;
         }
         getRowObjectFromFields(
           eids,
-          eidIdx,
+          idsHeaderIndex,
           row,
-          obj,
-          fullnameIdx,
-          seeAllIdx,
-          invisibleIdx,
-          phoneRowsIndex,
-          emailRowsIndex,
-          classesIndex
+          builderObject,
+          fullnameHeaderIndex,
+          seeAllHeaderIndex,
+          invisibleHeaderIndex,
+          phoneHeadersIndex,
+          emailHeadersIndex,
+          classesHeadersIndex
         );
 
-        return obj;
+        return builderObject;
       })
       .filter((val) => val);
 
@@ -50,16 +51,16 @@ fs.readFile(csvPath, function (err, fileData) {
     let addressesPhones = parseGroupedPhones(
       groupedOutput,
       eids,
-      phoneRowsIndex
+      phoneHeadersIndex
     );
 
     let addressesEmails = parseGroupedEmails(
       groupedOutput,
       eids,
-      emailRowsIndex
+      emailHeadersIndex
     ); // still have to implement checks
 
-    let classes = parseGroupedClasses(groupedOutput, eids, classesIndex);
+    let classes = parseGroupedClasses(groupedOutput, eids, classesHeadersIndex);
     let finalOutput = [];
 
     buildFinalJsonOutput(
