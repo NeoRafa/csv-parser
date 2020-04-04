@@ -5,12 +5,16 @@ const fs = require("fs");
 var parse = require("csv-parse");
 var _ = require("lodash");
 
+const PNF = require("google-libphonenumber").PhoneNumberFormat;
+const AsYouTypeFormatter = require("google-libphonenumber").AsYouTypeFormatter;
+const phoneUtil = require("google-libphonenumber").PhoneNumberUtil.getInstance();
+
 var csvPath = "input.csv";
 
 fs.readFile(csvPath, function (err, fileData) {
   if (err) throw err;
   parse(fileData, { columns: false, trim: true }, function (err, rows) {
-    let eids = [];
+    let ids = [];
 
     const emailHeadersIndex = getRowIndex(rows[0], "email");
     const phoneHeadersIndex = getRowIndex(rows[0], "phone");
@@ -27,8 +31,8 @@ fs.readFile(csvPath, function (err, fileData) {
         if (row[fullnameHeaderIndex[0][1]] === "fullname") {
           return null;
         }
-        getRowObjectFromFields(
-          eids,
+        createPersonDataObject(
+          ids,
           idsHeaderIndex,
           row,
           builderObject,
@@ -44,27 +48,27 @@ fs.readFile(csvPath, function (err, fileData) {
       })
       .filter((val) => val);
 
-    eids = _.uniq(eids);
+    ids = _.uniq(ids);
 
     let groupedOutput = groupRowsById(outputIntermediate);
 
     let addressesPhones = parseGroupedPhones(
       groupedOutput,
-      eids,
+      ids,
       phoneHeadersIndex
     );
 
     let addressesEmails = parseGroupedEmails(
       groupedOutput,
-      eids,
+      ids,
       emailHeadersIndex
     ); // still have to implement checks
 
-    let classes = parseGroupedClasses(groupedOutput, eids, classesHeadersIndex);
+    let classes = parseGroupedClasses(groupedOutput, ids, classesHeadersIndex);
     let finalOutput = [];
 
     buildFinalJsonOutput(
-      eids,
+      ids,
       outputIntermediate,
       classes,
       addressesPhones,
@@ -95,7 +99,7 @@ function getRowIndex(row, field) {
 }
 
 function buildFinalJsonOutput(
-  eids,
+  ids,
   outputIntermediate,
   classes,
   addressesPhones,
@@ -103,14 +107,14 @@ function buildFinalJsonOutput(
   groupedOutput,
   finalOutput
 ) {
-  eids.forEach((key) => {
+  ids.forEach((key) => {
     let jsonObjectBuilder = {
       fullname: outputIntermediate.find((elem) => elem.eid === key).fullname,
       eid: key,
-      classes: findClassByEid(classes, key),
+      classes: findClassById(classes, key),
       tags: [
-        ...findPhoneByEid(addressesPhones, key),
-        ...findEmailByEid(addressesEmails, key),
+        ...findPhoneById(addressesPhones, key),
+        ...findEmailById(addressesEmails, key),
       ],
       invisible: getRowInvisibility(groupedOutput, key),
       see_all: getRowSeeAll(groupedOutput, key),
@@ -149,25 +153,36 @@ function groupRowsById(rows) {
 
 /* ***********************************************
  *@param groupedRows -rows grouped by ID
- *@param eids - Array containing IDs of each row entry
+ *@param ids - Array containing IDs of each row entry
  *@param phoneRowsIndex - Indexes of each phone related row
  **************************************************/
 
-function parseGroupedPhones(groupedRows, eids, phoneRowsIndex) {
-  return eids.map((key) => {
+function parseGroupedPhones(groupedRows, ids, phoneRowsIndex) {
+  let parsedPhones = ids.map((key) => {
     return {
-      eid: key,
+      currId: key,
       phones: phoneRowsIndex
         .map((phoneRow) => {
           obj = {};
-          groupedRows[key].forEach((row) => {
+          groupedRows[key].forEach((person) => {
+            let formatedNumber = person[phoneRow[0]].replace(/ |\(|\)/g, "");
+            let number =
+              formatedNumber && !isNaN(formatedNumber)
+                ? phoneUtil.parseAndKeepRawInput(formatedNumber, "BR")
+                : null;
+            if (!number || !phoneUtil.isValidNumber(number)) {
+              return null;
+            }
+
             tags = phoneRow[0]
               .split(/,| /)
               .slice(1)
               .filter((val) => val);
-            obj["type"] = "phone";
+
             obj["tags"] = tags;
-            obj["address"] = row[phoneRow[0]];
+            obj["address"] = phoneUtil
+              .format(number, PNF.E164)
+              .replace("+", "");
           });
           if (obj.address) {
             return obj;
@@ -176,46 +191,105 @@ function parseGroupedPhones(groupedRows, eids, phoneRowsIndex) {
         .filter((val) => val),
     };
   });
+
+  const phonesResult = groupPhonesAndParse(ids, parsedPhones);
+  return phonesResult;
+}
+
+function groupPhonesAndParse(ids, parsedPhones) {
+  return ids.map((key) => {
+    let phones = findPhoneById(parsedPhones, key);
+    let phoneNumbers = _.uniq(phones.map((phone) => phone.address));
+    let groupedPhones = _.groupBy(phones, (phone) => phone.address);
+    return {
+      currId: key,
+      phones: phoneNumbers.map((phoneNumber) => {
+        return _.reduce(
+          groupedPhones[phoneNumber],
+          (acc, curr) => {
+            acc.tags.push(...curr.tags);
+            return acc;
+          },
+          {
+            type: "phone",
+            tags: [],
+            address: phoneNumber,
+          }
+        );
+      }),
+    };
+  });
+}
+
+function groupEmailsAndParse(ids, parsedEmails) {
+  return ids.map((key) => {
+    let emails = findEmailById(parsedEmails, key);
+    let emailsAddresses = _.uniq(emails.map((email) => email.address)); 
+    let groupedEmails = _.groupBy(emails, (email) => email.address);
+    return {
+      currId: key,
+      emails: emailsAddresses.map((emailAddress) => {
+        return _.reduce(
+          groupedEmails[emailAddress],
+          (acc, curr) => {
+            acc.tags.push(...curr.tags);
+            return acc;
+          },
+          {
+            type: "email",
+            tags: [],
+            address: emailAddress,
+          }
+        );
+      }),
+    };
+  });
 }
 
 /* ***********************************************
  *@param groupedRows -rows grouped by ID
- *@param eids - Array containing IDs of each row entry
+ *@param ids - Array containing IDs of each row entry
  *@param emailRowsIndex - indexes of each email related row
  **************************************************/
 
-function parseGroupedEmails(groupedRows, eids, emailRowsIndex) {
-  return eids.map((key) => {
+function parseGroupedEmails(groupedRows, ids, emailRowsIndex) {
+  const parsedEmails = ids.map((key) => {
     return {
-      eid: key,
+      currId: key,
       emails: emailRowsIndex
         .map((emailRow) => {
           obj = {};
-          groupedRows[key].forEach((row) => {
+          groupedRows[key].forEach((person) => {
             tags = emailRow[0]
               .split(/,| /)
               .slice(1)
               .filter((val) => val);
-            obj["type"] = "email";
             obj["tags"] = tags;
-            obj["address"] = row[emailRow[0]];
+            obj["address"] = person[emailRow[0]];
           });
-          if (obj.address) {
+          if (
+            obj.address &&
+            obj.address.match(/^[^@\s]+@[^@\s\.]+\.[^@\.\s]+$/)
+          ) {
             return obj;
           } else null;
         })
         .filter((val) => val),
     };
   });
+
+
+  const emailResult = groupEmailsAndParse(ids, parsedEmails);
+  return emailResult;
 }
 
 /* ***********************************************
  *@param groupedRows -rows grouped by ID
- *@param eids - Array containing IDs of each row entry
+ *@param ids - Array containing IDs of each row entry
  **************************************************/
 
-function parseGroupedClasses(groupedRows, eids) {
-  return eids.map((key) => {
+function parseGroupedClasses(groupedRows, ids) {
+  return ids.map((key) => {
     return {
       eid: key,
       ..._.reduce(
@@ -233,14 +307,14 @@ function parseGroupedClasses(groupedRows, eids) {
 }
 
 /* ***********************************************
- *@param eids - IDS for each row entry in CSV
+ *@param ids - IDS for each row entry in CSV
  *@param currentRow - Current row for which object is being created
  *@param builderObject - result object to return from row
  *@params *Index - Index at splitted CSV of *
  **************************************************/
 
-function getRowObjectFromFields(
-  eids,
+function createPersonDataObject(
+  ids,
   idIndex,
   currentRow,
   builderObject,
@@ -251,7 +325,7 @@ function getRowObjectFromFields(
   emailRowsIndex,
   classesIndex
 ) {
-  eids.push(currentRow[idIndex[0][1]]);
+  ids.push(currentRow[idIndex[0][1]]);
   builderObject[fullnameIndex[0][0]] = currentRow[fullnameIndex[0][1]];
   builderObject[idIndex[0][0]] = currentRow[idIndex[0][1]];
   builderObject[seeAllIndex[0][0]] = currentRow[seeAllIndex[0][1]];
@@ -279,7 +353,7 @@ function getRowObjectFromFields(
  *@param classes - classes ready object for output
  **************************************************/
 
-function findClassByEid(classes, eid) {
+function findClassById(classes, eid) {
   let classOut = classes.filter((classItem) => classItem["eid"] === eid);
   if (classOut !== []) {
     return classes.filter((classItem) => classItem["eid"] === eid)[0].classes;
@@ -293,10 +367,10 @@ function findClassByEid(classes, eid) {
  *@param phones - phones ready object for output
  **************************************************/
 
-function findPhoneByEid(phones, eid) {
-  let phonOut = phones.filter((phonItem) => phonItem["eid"] === eid);
+function findPhoneById(phones, eid) {
+  let phonOut = phones.filter((phonItem) => phonItem["currId"] === eid);
   if (phonOut !== []) {
-    return phones.filter((phonItem) => phonItem["eid"] === eid)[0].phones;
+    return phones.filter((phonItem) => phonItem["currId"] === eid)[0].phones;
   } else {
     return null;
   }
@@ -306,10 +380,11 @@ function findPhoneByEid(phones, eid) {
  *@param eid - ID for each row entry
  *@param emails - emails ready object for output
  **************************************************/
-function findEmailByEid(emails, eid) {
-  let emailsOut = emails.filter((emailsItem) => emailsItem["eid"] === eid);
+function findEmailById(emails, eid) {
+  let emailsOut = emails.filter((emailsItem) => emailsItem["currId"] === eid);
   if (emailsOut !== []) {
-    return emails.filter((emailsItem) => emailsItem["eid"] === eid)[0].emails;
+    return emails.filter((emailsItem) => emailsItem["currId"] === eid)[0]
+      .emails;
   } else {
     return null;
   }

@@ -1,1 +1,51 @@
-[{"fullname":"John Doe 1","eid":"1234","classes":["Sala 1","Sala 2","Sala 3","Sala 4","Sala 5","Sala 6"],"tags":[{"type":"phone","tags":["Pai"],"address":"19 985504400"},{"type":"phone","tags":["Responsável","Mãe"],"address":"(11) 38839333"},{"type":"email","tags":["Responsável","Pai"],"address":"johndoepai2@gmail.com/johndoepai3@gmail.com"},{"type":"email","tags":["Mãe"],"address":"11 983340440"}],"invisible":true,"see_all":true},{"fullname":"Mary Doe 2","eid":"1235","classes":["Sala 1"],"tags":[{"type":"phone","tags":["Responsável","Mãe"],"address":"(11) 98334228"},{"type":"email","tags":["Responsável","Pai"],"address":"marydoe1@gmail.com"}],"invisible":false,"see_all":false},{"fullname":"Victor Doe 3","eid":"1236","classes":["Sala 6","Sala 7"],"tags":[{"type":"phone","tags":["Aluno"],"address":"19 74430033"},{"type":"email","tags":["Responsável","Pai"],"address":"victordoepai1@hotmail.com"},{"type":"email","tags":["Mãe"],"address":"victordoe3@gmail.com"},{"type":"email","tags":["Aluno"],"address":"victordoe3@gmail.com"}],"invisible":false,"see_all":false}]
+[
+  {
+    "fullname": "John Doe 1",
+    "eid": "1234",
+    "classes": ["Sala 1", "Sala 2", "Sala 3", "Sala 4", "Sala 5", "Sala 6"],
+    "tags": [
+      { "type": "phone", "tags": ["Pai"], "address": "5519985504400" },
+      {
+        "type": "phone",
+        "tags": ["Responsável", "Mãe"],
+        "address": "551138839333"
+      }
+    ],
+    "invisible": true,
+    "see_all": true
+  },
+  {
+    "fullname": "Mary Doe 2",
+    "eid": "1235",
+    "classes": ["Sala 1"],
+    "tags": [
+      {
+        "type": "email",
+        "tags": ["Responsável", "Pai"],
+        "address": "marydoe1@gmail.com"
+      }
+    ],
+    "invisible": false,
+    "see_all": false
+  },
+  {
+    "fullname": "Victor Doe 3",
+    "eid": "1236",
+    "classes": ["Sala 6", "Sala 7"],
+    "tags": [
+      { "type": "phone", "tags": ["Aluno"], "address": "551974430033" },
+      {
+        "type": "email",
+        "tags": ["Responsável", "Pai"],
+        "address": "victordoepai1@hotmail.com"
+      },
+      {
+        "type": "email",
+        "tags": ["Mãe", "Aluno"],
+        "address": "victordoe3@gmail.com"
+      }
+    ],
+    "invisible": false,
+    "see_all": false
+  }
+]
