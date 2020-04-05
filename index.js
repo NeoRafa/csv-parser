@@ -6,7 +6,6 @@ var parse = require("csv-parse");
 var _ = require("lodash");
 
 const PNF = require("google-libphonenumber").PhoneNumberFormat;
-const AsYouTypeFormatter = require("google-libphonenumber").AsYouTypeFormatter;
 const phoneUtil = require("google-libphonenumber").PhoneNumberUtil.getInstance();
 
 var csvPath = "input.csv";
@@ -46,7 +45,7 @@ fs.readFile(csvPath, function (err, fileData) {
 
         return builderObject;
       })
-      .filter((val) => val);
+      .filter((nonNullEntry) => nonNullEntry);
 
     ids = _.uniq(ids);
 
@@ -95,7 +94,7 @@ function getRowIndex(row, field) {
     .map((row, index) => {
       return row.includes(field) ? [row, index] : null;
     })
-    .filter((val) => val);
+    .filter((nonNullEntry) => nonNullEntry);
 }
 
 function buildFinalJsonOutput(
@@ -126,7 +125,7 @@ function buildFinalJsonOutput(
 /* ***********************************************
  *@param rows - csv parsed data rows
  *@param key - current analysing row ID
- **************************************************/
+ *************************************************/
 
 function getRowInvisibility(rows, key) {
   return rows[key].filter((elem) => elem.invisible === "1").length > 0;
@@ -163,32 +162,42 @@ function parseGroupedPhones(groupedRows, ids, phoneRowsIndex) {
       currId: key,
       phones: phoneRowsIndex
         .map((phoneRow) => {
-          obj = {};
+          obj = [];
           groupedRows[key].forEach((person) => {
-            let formatedNumber = person[phoneRow[0]].replace(/ |\(|\)/g, "");
-            let number =
-              formatedNumber && !isNaN(formatedNumber)
-                ? phoneUtil.parseAndKeepRawInput(formatedNumber, "BR")
-                : null;
-            if (!number || !phoneUtil.isValidNumber(number)) {
-              return null;
-            }
+            let numbers = person[phoneRow[0]]
+              .split(/,|\//)
+              .map((phone) => {
+                let formatedNumber = phone.replace(/ |\(|\)/g, "");
+                let number =
+                  formatedNumber && !isNaN(formatedNumber)
+                    ? phoneUtil.parseAndKeepRawInput(formatedNumber, "BR")
+                    : null;
+                if (!number || !phoneUtil.isValidNumber(number)) {
+                  return null;
+                } else
+                  return phoneUtil.format(number, PNF.E164).replace("+", "");
+              })
+              .filter((nonNullEntry) => nonNullEntry);
 
             tags = phoneRow[0]
               .split(/,| /)
               .slice(1)
-              .filter((val) => val);
+              .filter((nonNullEntry) => nonNullEntry);
 
-            obj["tags"] = tags;
-            obj["address"] = phoneUtil
-              .format(number, PNF.E164)
-              .replace("+", "");
+            obj.push(...numbers);
           });
-          if (obj.address) {
+
+          if (obj.length > 0) {
+            obj = obj.map((number) => {
+              let buildObj = {};
+              buildObj["tags"] = tags;
+              buildObj["address"] = number;
+              return buildObj;
+            });
             return obj;
           } else null;
         })
-        .filter((val) => val),
+        .filter((nonNullEntry) => nonNullEntry),
     };
   });
 
@@ -196,9 +205,14 @@ function parseGroupedPhones(groupedRows, ids, phoneRowsIndex) {
   return phonesResult;
 }
 
+/* ***********************************************
+ *@param ids - Array containing IDs of each row entry
+ *@param parsedPhones - represent the alredy pre-parsed phone object ready to be grouped
+ **************************************************/
+
 function groupPhonesAndParse(ids, parsedPhones) {
   return ids.map((key) => {
-    let phones = findPhoneById(parsedPhones, key);
+    let phones = _.flattenDeep(findPhoneById(parsedPhones, key));
     let phoneNumbers = _.uniq(phones.map((phone) => phone.address));
     let groupedPhones = _.groupBy(phones, (phone) => phone.address);
     return {
@@ -208,6 +222,7 @@ function groupPhonesAndParse(ids, parsedPhones) {
           groupedPhones[phoneNumber],
           (acc, curr) => {
             acc.tags.push(...curr.tags);
+            acc.tags = _.uniq(acc.tags);
             return acc;
           },
           {
@@ -221,10 +236,19 @@ function groupPhonesAndParse(ids, parsedPhones) {
   });
 }
 
+/* ***********************************************
+ *@param ids - Array containing IDs of each row entry
+ *@param parsedEmails - represent the alredy pre-parsed emails object ready to be grouped
+ **************************************************/
+
 function groupEmailsAndParse(ids, parsedEmails) {
   return ids.map((key) => {
-    let emails = findEmailById(parsedEmails, key);
-    let emailsAddresses = _.uniq(emails.map((email) => email.address)); 
+    let emails = _.flattenDeep(findEmailById(parsedEmails, key));
+    let emailAddresses = emails.map((email) => {
+      return email.address;
+    });
+
+    emailsAddresses = _.uniq(emailAddresses);
     let groupedEmails = _.groupBy(emails, (email) => email.address);
     return {
       currId: key,
@@ -233,6 +257,7 @@ function groupEmailsAndParse(ids, parsedEmails) {
           groupedEmails[emailAddress],
           (acc, curr) => {
             acc.tags.push(...curr.tags);
+            acc.tags = _.uniq(acc.tags);
             return acc;
           },
           {
@@ -258,26 +283,33 @@ function parseGroupedEmails(groupedRows, ids, emailRowsIndex) {
       currId: key,
       emails: emailRowsIndex
         .map((emailRow) => {
-          obj = {};
+          obj = [];
           groupedRows[key].forEach((person) => {
+            let personEmails = [];
             tags = emailRow[0]
               .split(/,| /)
               .slice(1)
-              .filter((val) => val);
-            obj["tags"] = tags;
-            obj["address"] = person[emailRow[0]];
+              .filter((nonNullEntry) => nonNullEntry);
+            personEmails = [...person[emailRow[0]].split(/,| |\//)];
+            personEmails = personEmails
+              .filter((email) => email.match(/^[^@\s]+@[^@\s\.]+\.[^@\.\s]+$/))
+              .filter((nonNullEntry) => nonNullEntry);
+
+            obj.push(...personEmails);
           });
-          if (
-            obj.address &&
-            obj.address.match(/^[^@\s]+@[^@\s\.]+\.[^@\.\s]+$/)
-          ) {
+          if (obj.length > 0) {
+            obj = obj.map((email) => {
+              let buildObj = {};
+              buildObj["tags"] = tags;
+              buildObj["address"] = email;
+              return buildObj;
+            });
             return obj;
           } else null;
         })
-        .filter((val) => val),
+        .filter((nonNullEntry) => nonNullEntry),
     };
   });
-
 
   const emailResult = groupEmailsAndParse(ids, parsedEmails);
   return emailResult;
@@ -343,7 +375,7 @@ function createPersonDataObject(
       ...currentRow[classesRow[1]]
         .split(/,|\//)
         .map((elem) => elem.trim())
-        .filter((val) => val)
+        .filter((nonNullEntry) => nonNullEntry)
     );
   });
 }
