@@ -162,7 +162,7 @@ function parseGroupedPhones(groupedRows, ids, phoneRowsIndex) {
       currId: key,
       phones: phoneRowsIndex
         .map((phoneRow) => {
-          obj = [];
+          numbersArray = [];
           groupedRows[key].forEach((person) => {
             let numbers = person[phoneRow[0]]
               .split(/,|\//)
@@ -174,8 +174,9 @@ function parseGroupedPhones(groupedRows, ids, phoneRowsIndex) {
                     : null;
                 if (!number || !phoneUtil.isValidNumber(number)) {
                   return null;
-                } else
+                } else {
                   return phoneUtil.format(number, PNF.E164).replace("+", "");
+                }
               })
               .filter((nonNullEntry) => nonNullEntry);
 
@@ -184,17 +185,18 @@ function parseGroupedPhones(groupedRows, ids, phoneRowsIndex) {
               .slice(1)
               .filter((nonNullEntry) => nonNullEntry);
 
-            obj.push(...numbers);
+            numbersArray.push(...numbers);
           });
 
-          if (obj.length > 0) {
-            obj = obj.map((number) => {
-              let buildObj = {};
-              buildObj["tags"] = tags;
-              buildObj["address"] = number;
-              return buildObj;
+          if (numbersArray.length > 0) {
+            numbersArray = numbersArray.map((number) => {
+              let buildNumbersArray = {};
+              buildNumbersArray["tags"] = tags;
+              buildNumbersArray["address"] = number;
+              return buildNumbersArray;
             });
-            return obj;
+
+            return numbersArray;
           } else null;
         })
         .filter((nonNullEntry) => nonNullEntry),
@@ -283,28 +285,28 @@ function parseGroupedEmails(groupedRows, ids, emailRowsIndex) {
       currId: key,
       emails: emailRowsIndex
         .map((emailRow) => {
-          obj = [];
+          emailsArray = [];
           groupedRows[key].forEach((person) => {
             let personEmails = [];
             tags = emailRow[0]
               .split(/,| /)
               .slice(1)
               .filter((nonNullEntry) => nonNullEntry);
-            personEmails = [...person[emailRow[0]].split(/,| |\//)];
+            personEmails = [...person[emailRow[0]].split(/,|\//)];
             personEmails = personEmails
               .filter((email) => email.match(/^[^@\s]+@[^@\s\.]+\.[^@\.\s]+$/))
               .filter((nonNullEntry) => nonNullEntry);
 
-            obj.push(...personEmails);
+            emailsArray.push(...personEmails);
           });
-          if (obj.length > 0) {
-            obj = obj.map((email) => {
-              let buildObj = {};
-              buildObj["tags"] = tags;
-              buildObj["address"] = email;
-              return buildObj;
+          if (emailsArray.length > 0) {
+            emailsArray = emailsArray.map((email) => {
+              let emailsBuilder = {};
+              emailsBuilder["tags"] = tags;
+              emailsBuilder["address"] = email;
+              return emailsBuilder;
             });
-            return obj;
+            return emailsArray;
           } else null;
         })
         .filter((nonNullEntry) => nonNullEntry),
