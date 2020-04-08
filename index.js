@@ -61,7 +61,7 @@ fs.readFile(csvPath, function (err, fileData) {
       groupedOutput,
       ids,
       emailHeadersIndex
-    ); // still have to implement checks
+    );
 
     let classes = parseGroupedClasses(groupedOutput, ids, classesHeadersIndex);
     let finalOutput = [];
